@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Image Processing</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f7f9fc;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #2c3e50;
+        }
+        .form-container {
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            width: 100%;
+            max-width: 600px;
+            margin-top: 20px;
+        }
+        .form-container button, .form-container input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            margin-top: 10px;
+            border: 2px solid transparent;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .form-container button:hover, .form-container input[type="file"]:hover {
+            border-color: #2980b9;
+        }
+        .form-container button#selectImage {
+            background-color: #3498db;
+            color: #fff;
+        }
+        .form-container button#captureImage {
+            background-color: #e74c3c;
+            color: #fff;
+        }
+        .form-container button#cropButton {
+            background-color: #27ae60;
+            color: #fff;
+            display: none;
+        }
+        .form-container button#downloadButton {
+            background-color: #8e44ad;
+            color: #fff;
+            margin-top: 10px;
+        }
+        .crop-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        img {
+            max-width: 100%;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .result-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-top: 20px;
+        }
+        .edit-button {
+            background-color: #2980b9;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            padding: 5px 10px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        table, th, td {
+            border: 1px solid #ccc;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+        }
+        .loading {
+            display: none;
+            margin-top: 10px;
+            font-size: 16px;
+            color: #2c3e50;
+        }
+    </style>
+</head>
+<body>
+    <h1>OCR Image Processing Dashboard</h1>
+    <div class="form-container">
+        <form id="uploadForm" enctype="multipart/form-data">
+            <button type="button" id="selectImage">Select Image</button>
+            <button type="button" id="captureImage">Capture Image</button>
+            <input type="file" id="inputImage" name="image" accept="image/*" style="display:none;">
+            <div class="crop-container">
+                <img id="image" style="display:none;">
+            </div>
+            <button type="button" id="cropButton" style="display:none;">Crop and Upload</button>
+            <div class="loading" id="loading">Processing...</div>
+        </form>
+    </div>
+    <div class="result-container">
+        <button class="edit-button" id="editButton">Edit</button>
+        <button class="edit-button" id="downloadButton" style="display:none;">Download Result</button>
+        <table id="resultTable" style="display:none;"></table>
+        <textarea id="result" class="result" placeholder="OCR result will appear here and can be edited..." readonly style="display:none;"></textarea>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.12/cropper.min.js"></script>
+    <script>
+        let cropper;
+        let imageFiles = [];
+        let currentImageIndex = 0;
+        const selectImage = document.getElementById('selectImage');
+        const captureImage = document.getElementById('captureImage');
+        const inputImage = document.getElementById('inputImage');
+        const image = document.getElementById('image');
+        const cropButton = document.getElementById('cropButton');
+        const loading = document.getElementById('loading');
+        const resultTable = document.getElementById('resultTable');
+        const editButton = document.getElementById('editButton');
+        const downloadButton = document.getElementById('downloadButton');
+
+        selectImage.onclick = () => {
+            inputImage.click();
+        };
+
+        inputImage.onchange = (event) => {
+            const files = event.target.files;
+            if (files && files.length > 0) {
+                const file = files[0];
+                const reader = new FileReader();
+                reader.onload = () => {
+                    image.src = reader.result;
+                    image.style.display = 'block';
+                    cropButton.style.display = 'block';
+                    if (cropper) {
+                        cropper.destroy();
+                    }
+                    cropper = new Cropper(image, {
+                        aspectRatio: NaN,
+                        viewMode: 1
+                    });
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+
+        captureImage.onclick = async () => {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            const video = document.createElement('video');
+            video.srcObject = stream;
+            video.play();
+
+            const captureButton = document.createElement('button');
+            captureButton.textContent = 'Capture';
+            captureButton.style.cssText = `
+                position: fixed;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                padding: 10px 20px;
+                background-color: #2980b9;
+                color: #fff;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+            `;
+            document.body.appendChild(video);
+            document.body.appendChild(captureButton);
+
+            captureButton.onclick = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const context = canvas.getContext('2d');
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                image.src = canvas.toDataURL('image/png');
+                image.style.display = 'block';
+                cropButton.style.display = 'block';
+                if (cropper) {
+                    cropper.destroy();
+                }
+                cropper = new Cropper(image, {
+                    aspectRatio: NaN,
+                    viewMode: 1
+                });
+
+                stream.getTracks().forEach(track => track.stop());
+                document.body.removeChild(video);
+                document.body.removeChild(captureButton);
+            };
+        };
+
+        function displayNextImage() {
+            if (currentImageIndex < imageFiles.length) {
+                const file = imageFiles[currentImageIndex];
+                const reader = new FileReader();
+                reader.onload = () => {
+                    image.src = reader.result;
+                    image.style.display = 'block';
+                    cropButton.style.display = 'block';
+                    if (cropper) {
+                        cropper.destroy();
+                    }
+                    cropper = new Cropper(image, {
+                        aspectRatio: NaN,
+                        viewMode: 1
+                    });
+                };
+                reader.readAsDataURL(file);
+            } else {
+                // No alert displayed here anymore
+            }
+        }
+
+        cropButton.onclick = async () => {
+            loading.style.display = 'block';
+            const canvas = cropper.getCroppedCanvas();
+            const blob = await new Promise(resolve => canvas.toBlob(resolve));
+            const formData = new FormData();
+            formData.append('image', blob, 'cropped_image.png');
+            const response = await fetch('/process_image', {
+                method: 'POST',
+                body: formData
+            });
+            const resultData = await response.json();
+            displayResultAsTable(resultData);
+            loading.style.display = 'none';
+            downloadButton.style.display = 'block';
+            currentImageIndex++;
+            displayNextImage();
+        };
+
+        editButton.onclick = () => {
+            if (editButton.textContent === "Edit") {
+                makeTableEditable(true);
+                editButton.textContent = "Save";
+                editButton.style.backgroundColor = "#27ae60";
+            } else {
+                makeTableEditable(false);
+                editButton.textContent = "Edit";
+                editButton.style.backgroundColor = "#2980b9";
+            }
+        };
+
+        downloadButton.onclick = () => {
+            const tableData = {};
+            const rows = resultTable.querySelectorAll('tr');
+            rows.forEach((row, index) => {
+                if (index > 0) {
+                    const cells = row.querySelectorAll('td');
+                    const key = cells[0].textContent;
+                    const value = cells[1].textContent;
+                    tableData[key] = value;
+                }
+            });
+            const jsonStr = JSON.stringify(tableData, null, 2);
+            const blob = new Blob([jsonStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'result.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        };
+
+        function displayResultAsTable(data) {
+            resultTable.innerHTML = '';
+            resultTable.style.display = 'table';
+            const tableHeader = '<tr><th>Field</th><th>Value</th></tr>';
+            resultTable.innerHTML = tableHeader;
+            for (const [key, value] of Object.entries(data)) {
+                const row = `<tr><td>${key}</td><td contenteditable="true">${value}</td></tr>`;
+                resultTable.innerHTML += row;
+            }
+        }
+
+        function makeTableEditable(editable) {
+            const cells = resultTable.querySelectorAll('td[contenteditable]');
+            cells.forEach(cell => {
+                cell.contentEditable = editable;
+                if (editable) {
+                    cell.style.backgroundColor = '#fff';
+                    cell.style.border = '1px solid #ccc';
+                } else {
+                    cell.style.backgroundColor = '';
+                    cell.style.border = '';
+                }
+            });
+        }
+    </script>
+</body>
+</html>

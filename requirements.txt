@@ -1,0 +1,7 @@
+Flask
+opencv-python-headless
+pillow
+paddleocr
+paddlepaddle
+numpy
+requests
